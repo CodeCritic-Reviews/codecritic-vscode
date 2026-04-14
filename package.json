@@ -1,0 +1,92 @@
+{
+  "name": "codecritic",
+  "displayName": "CodeCritic",
+  "description": "Run CodeCritic reviews from VS Code or Cursor. Full results in the editor (API key from Dashboard).",
+  "version": "0.1.0",
+  "publisher": "codecritic",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Linters",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "codecritic.setApiKey",
+        "title": "CodeCritic: Set API key"
+      },
+      {
+        "command": "codecritic.openDashboardApiKey",
+        "title": "CodeCritic: Open Dashboard (API key)"
+      },
+      {
+        "command": "codecritic.reviewSelection",
+        "title": "CodeCritic: Review selection"
+      },
+      {
+        "command": "codecritic.reviewActiveFile",
+        "title": "CodeCritic: Review active file"
+      },
+      {
+        "command": "codecritic.reviewFiles",
+        "title": "CodeCritic: Review files…"
+      },
+      {
+        "command": "codecritic.reviewFolder",
+        "title": "CodeCritic: Review folder…"
+      },
+      {
+        "command": "codecritic.openLastResult",
+        "title": "CodeCritic: Open last review result"
+      }
+    ],
+    "configuration": {
+      "title": "CodeCritic",
+      "properties": {
+        "codecritic.apiBaseUrl": {
+          "type": "string",
+          "default": "https://api.code-critic.com",
+          "description": "CodeCritic API base URL (no trailing slash)."
+        },
+        "codecritic.dashboardUrl": {
+          "type": "string",
+          "default": "https://code-critic.com",
+          "description": "Dashboard URL for opening API key settings in the browser."
+        }
+      }
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "codecritic.reviewSelection",
+          "group": "codecritic@1",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "codecritic.reviewActiveFile",
+          "group": "codecritic@2"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "node esbuild.config.mjs",
+    "watch": "node esbuild.config.mjs --watch",
+    "vscode:prepublish": "npm run compile",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.80.0",
+    "@vscode/vsce": "^2.24.0",
+    "esbuild": "^0.20.2",
+    "typescript": "^5.4.0"
+  }
+}
