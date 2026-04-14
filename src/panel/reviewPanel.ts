@@ -3,6 +3,7 @@ import type { CodeCriticClient } from '../api/client';
 import type { CodeReviewPayload } from '../api/types';
 import type { BlobSection } from '../payload/buildReviewPayload';
 import { resolveBlobLineToEditor } from '../payload/buildReviewPayload';
+import { sendFindingToAgent } from './sendFindingToAgent';
 
 function getNonce(): string {
   let t = '';
@@ -103,6 +104,26 @@ export class ReviewPanel {
           ed.selection = new vscode.Selection(pos, pos);
           ed.revealRange(new vscode.Range(pos, pos));
         }
+        return;
+      }
+
+      if (type === 'sendToAgent' && uuid) {
+        const itemIndex = Number(msg.item_index);
+        if (!Number.isFinite(itemIndex)) {
+          void vscode.window.showErrorMessage('CodeCritic: invalid finding index.');
+          return;
+        }
+        await sendFindingToAgent(this.sections, {
+          reviewUuid: uuid,
+          reviewTitle: typeof msg.review_title === 'string' ? msg.review_title : undefined,
+          itemKind: msg.item_kind as 'issue' | 'suggestion',
+          itemIndex,
+          message: typeof msg.message === 'string' ? msg.message : '',
+          path: typeof msg.path === 'string' ? msg.path : undefined,
+          line: typeof msg.line === 'number' ? msg.line : undefined,
+          suggestion: typeof msg.suggestion === 'string' ? msg.suggestion : undefined,
+          suggestionCode: typeof msg.suggestion_code === 'string' ? msg.suggestion_code : undefined,
+        });
         return;
       }
 

@@ -2,7 +2,7 @@
   "name": "codecritic",
   "displayName": "CodeCritic",
   "description": "Run CodeCritic reviews from VS Code or Cursor. Full results in the editor (API key from Dashboard).",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "publisher": "codecritic",
   "license": "MIT",
   "engines": {

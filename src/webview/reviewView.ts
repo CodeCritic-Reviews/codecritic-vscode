@@ -68,7 +68,8 @@ function renderIssue(
   issue: ReviewIssue,
   index: number,
   ui: FindingsUi | null,
-  kind: 'issue' | 'suggestion'
+  kind: 'issue' | 'suggestion',
+  reviewTitle: string
 ): HTMLElement {
   const metaRow =
     kind === 'issue' ? ui?.issues?.[index] : ui?.suggestions?.[index];
@@ -106,38 +107,32 @@ function renderIssue(
   }
 
   const actions = el('div', 'issue-meta');
-  if (kind === 'issue') {
-    const d = el('button', '', 'Dismiss');
-    d.addEventListener('click', () =>
-      vscode.postMessage({
-        type: 'setFinding',
-        uuid: reviewUuid,
-        item_kind: 'issue',
-        item_index: index,
-        state: 'dismissed',
-      })
-    );
-    actions.appendChild(d);
-  }
-  const done = el('button', 'secondary', 'Done');
-  done.addEventListener('click', () =>
+  const chat = el('button', '', 'Fix in Chat');
+  chat.title =
+    'Open Chat or Agent with a ready-made prompt (VS Code Copilot, Cursor, etc.). The file is opened when line mapping is available.';
+  chat.addEventListener('click', () =>
     vscode.postMessage({
-      type: 'setFinding',
+      type: 'sendToAgent',
       uuid: reviewUuid,
+      review_title: reviewTitle,
       item_kind: kind,
       item_index: index,
-      state: 'done',
+      message: issue.message,
+      path: issue.path,
+      line: issue.line,
+      suggestion: issue.suggestion,
+      suggestion_code: issue.suggestion_code,
     })
   );
-  actions.appendChild(done);
+  actions.appendChild(chat);
   row.appendChild(actions);
 
   return row;
 }
 
-function renderSuggestion(text: string, index: number, ui: FindingsUi | null): HTMLElement {
+function renderSuggestion(text: string, index: number, ui: FindingsUi | null, reviewTitle: string): HTMLElement {
   const issue: ReviewIssue = { message: text };
-  return renderIssue(issue, index, ui, 'suggestion');
+  return renderIssue(issue, index, ui, 'suggestion', reviewTitle);
 }
 
 function render(review: CodeReviewPayload): void {
@@ -185,10 +180,12 @@ function render(review: CodeReviewPayload): void {
     app.appendChild(ul);
   }
 
+  const reviewTitle = review.title || '';
+
   const issues = res.issues || [];
   if (issues.length) {
     app.appendChild(el('h2', '', `Issues (${issues.length})`));
-    issues.forEach((iss, i) => app.appendChild(renderIssue(iss, i, findingsUi, 'issue')));
+    issues.forEach((iss, i) => app.appendChild(renderIssue(iss, i, findingsUi, 'issue', reviewTitle)));
   }
 
   const sugg = res.suggestions || [];
@@ -196,7 +193,7 @@ function render(review: CodeReviewPayload): void {
     app.appendChild(el('h2', '', `Suggestions (${sugg.length})`));
     sugg.forEach((s, i) => {
       const text = typeof s === 'string' ? s : s.message || s.text || JSON.stringify(s);
-      app.appendChild(renderSuggestion(text, i, findingsUi));
+      app.appendChild(renderSuggestion(text, i, findingsUi, reviewTitle));
     });
   }
 
