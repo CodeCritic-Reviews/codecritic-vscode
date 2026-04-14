@@ -24,7 +24,7 @@ npx vsce package --no-dependencies
 
 1. **CodeCritic: Set API key** → paste your key (stored in Secret Storage).
 2. Optional: **CodeCritic: Open Dashboard (API key)** if you need to copy or rotate the key.
-3. Optional setting **codecritic.apiBaseUrl** (default `https://api.code-critic.com`).
+3. Optional setting **codecritic.apiBaseUrl** (default `https://api.code-critic.com`). Against local Rack, use `http://localhost:9292/api` so requests hit `/api/v1/...` like the web app.
 
 ## Commands
 
@@ -40,7 +40,13 @@ Context menu: review selection / active file when editor is open.
 
 ## Auth
 
-The extension uses `Authorization: Bearer <API key>` against `/api/v1/code_reviews`. The same routes accept a JWT from the web app; the server treats a valid API key as an alternative bearer credential.
+The extension uses `Authorization: Bearer <API key>` against `/v1/code_reviews` on the API host (default `https://api.code-critic.com`). The same routes accept a JWT from the web app; the server treats a valid API key as an alternative bearer credential.
+
+## Troubleshooting
+
+**HTTP 404 / “Not Found”:** `codecritic.apiBaseUrl` must be the **API host** (e.g. `https://api.code-critic.com`), not the website. The extension calls `…/v1/code_reviews` itself. A 404 with plain text means the request hit a web server or CDN, not Grape JSON.
+
+**ByteString / character greater than 255:** Node’s `fetch` only allows Latin-1 in HTTP headers. The extension normalizes the key with NFKC and keeps only `0-9a-f` code points (no surrogates or homoglyphs). Settings **codecritic.apiBaseUrl** is stripped to ASCII. Re-run **CodeCritic: Set API key** and paste the key only from the dashboard, then reload the window.
 
 ## Limits
 

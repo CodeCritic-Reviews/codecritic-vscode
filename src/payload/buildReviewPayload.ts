@@ -23,19 +23,19 @@ export interface BuiltPayload {
   sections: BlobSection[];
 }
 
+/** One file or selection sent as part of a combined review payload */
+export type ReviewContentPart = {
+  displayPath: string;
+  uri: vscode.Uri;
+  content: string;
+  languageId: string;
+  anchorLineInFile?: number;
+};
+
 const HEADER_PREFIX = '=== CodeCritic: ';
 const HEADER_SUFFIX = ' ===';
 
-export function buildFromParts(
-  parts: Array<{
-    displayPath: string;
-    uri: vscode.Uri;
-    content: string;
-    languageId: string;
-    anchorLineInFile?: number;
-  }>,
-  titleHint: string
-): BuiltPayload {
+export function buildFromParts(parts: ReviewContentPart[], titleHint: string): BuiltPayload {
   const lines: string[] = [];
   const sections: BlobSection[] = [];
   let blobLine = 1;

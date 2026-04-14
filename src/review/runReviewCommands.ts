@@ -1,8 +1,13 @@
 import * as vscode from 'vscode';
-import { CodeCriticClient } from '../api/client';
+import { CodeCriticClient, normalizeApiKey, sanitizeApiBaseUrl } from '../api/client';
 import type { CodeReviewPayload } from '../api/types';
 import { ReviewPanel } from '../panel/reviewPanel';
-import { buildFromParts, DEFAULT_MAX_CODE_CHARS, type BlobSection } from '../payload/buildReviewPayload';
+import {
+  buildFromParts,
+  DEFAULT_MAX_CODE_CHARS,
+  type BlobSection,
+  type ReviewContentPart,
+} from '../payload/buildReviewPayload';
 import { collectFolderFiles } from '../collect/collectFolder';
 import { pollUntilReviewDone } from './pollUntilDone';
 
@@ -11,7 +16,7 @@ const MAX_RECENT = 15;
 
 function getBaseUrl(): string {
   const cfg = vscode.workspace.getConfiguration('codecritic');
-  return (cfg.get<string>('apiBaseUrl') || 'https://api.code-critic.com').replace(/\/+$/, '');
+  return cfg.get<string>('apiBaseUrl') || 'https://api.code-critic.com';
 }
 
 async function getApiKey(context: vscode.ExtensionContext): Promise<string | undefined> {
@@ -19,7 +24,7 @@ async function getApiKey(context: vscode.ExtensionContext): Promise<string | und
 }
 
 function makeClient(context: vscode.ExtensionContext): CodeCriticClient {
-  return new CodeCriticClient(getBaseUrl(), () => getApiKey(context));
+  return new CodeCriticClient(sanitizeApiBaseUrl(getBaseUrl()), () => getApiKey(context));
 }
 
 async function pushRecent(context: vscode.ExtensionContext, uuid: string): Promise<void> {
@@ -29,8 +34,8 @@ async function pushRecent(context: vscode.ExtensionContext, uuid: string): Promi
 }
 
 async function ensureKey(context: vscode.ExtensionContext): Promise<boolean> {
-  const k = await getApiKey(context);
-  if (k?.trim()) return true;
+  const k = normalizeApiKey((await getApiKey(context)) ?? '');
+  if (k) return true;
   void vscode.window.showErrorMessage('CodeCritic: set your API key first (CodeCritic: Set API key).');
   return false;
 }
@@ -38,7 +43,7 @@ async function ensureKey(context: vscode.ExtensionContext): Promise<boolean> {
 export async function runReviewWithParts(
   context: vscode.ExtensionContext,
   extensionUri: vscode.Uri,
-  parts: Array<{ displayPath: string; uri: vscode.Uri; content: string; languageId: string }>,
+  parts: ReviewContentPart[],
   titleHint: string
 ): Promise<void> {
   if (!(await ensureKey(context))) return;
@@ -218,7 +223,18 @@ export async function setApiKey(context: vscode.ExtensionContext): Promise<void>
     void vscode.window.showInformationMessage('CodeCritic: API key cleared.');
     return;
   }
-  await context.secrets.store('codecritic.apiKey', next.trim());
+  const normalized = normalizeApiKey(next);
+  if (!normalized) {
+    void vscode.window.showErrorMessage('CodeCritic: API key must contain hexadecimal characters only.');
+    return;
+  }
+  const compact = next.replace(/\s+/g, '');
+  if (compact !== normalized) {
+    void vscode.window.showInformationMessage(
+      'CodeCritic: removed invisible or non-hex characters from the key. Paste the key from the dashboard if auth fails.'
+    );
+  }
+  await context.secrets.store('codecritic.apiKey', normalized);
   void vscode.window.showInformationMessage('CodeCritic: API key saved.');
 }
 

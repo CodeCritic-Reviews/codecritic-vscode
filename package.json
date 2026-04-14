@@ -2,7 +2,7 @@
   "name": "codecritic",
   "displayName": "CodeCritic",
   "description": "Run CodeCritic reviews from VS Code or Cursor. Full results in the editor (API key from Dashboard).",
-  "version": "0.1.0",
+  "version": "0.1.6",
   "publisher": "codecritic",
   "license": "MIT",
   "engines": {
@@ -53,7 +53,7 @@
         "codecritic.apiBaseUrl": {
           "type": "string",
           "default": "https://api.code-critic.com",
-          "description": "CodeCritic API base URL (no trailing slash)."
+          "description": "API base URL: production https://api.code-critic.com (extension calls …/v1/… on it). Local Rack: http://localhost:9292/api. Not the marketing site."
         },
         "codecritic.dashboardUrl": {
           "type": "string",

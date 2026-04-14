@@ -90,7 +90,7 @@ function renderIssue(
   const meta = el('div', 'issue-meta');
   if (issue.line != null) {
     const go = el('a', 'link', `Line ${issue.line}`);
-    go.addEventListener('click', (e) => {
+    go.addEventListener('click', (e: MouseEvent) => {
       e.preventDefault();
       vscode.postMessage({ type: 'goToBlobLine', uuid: reviewUuid, line: issue.line });
     });
@@ -205,7 +205,7 @@ function render(review: CodeReviewPayload): void {
   }
 }
 
-window.addEventListener('message', (event) => {
+window.addEventListener('message', (event: MessageEvent) => {
   const msg = event.data as { type?: string; review?: CodeReviewPayload; findings_ui?: FindingsUi };
   if (msg.type === 'bootstrap' && msg.review) {
     render(msg.review);
