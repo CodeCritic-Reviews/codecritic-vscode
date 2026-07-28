@@ -4,20 +4,20 @@
 
 The **CodeCritic** activity bar opens a sidebar (API key, review actions, recent reviews). Results open in a panel: score, issues, suggestions, Trust focus, Mark as done / Dismiss, line jump, and **Fix in Chat**.
 
-Extension ID: `codecritic.codecritic`
+Extension ID: `CodeCritic.codecritic-vscode`
 
 ## Install
 
 ### Visual Studio Code
 
 1. Open **Extensions** (`Ctrl+Shift+X` / `Cmd+Shift+X`).
-2. Search for **CodeCritic** (publisher **codecritic**).
+2. Search for **CodeCritic** (publisher **CodeCritic**).
 3. Click **Install**.
 
-Or open the [Visual Studio Marketplace listing](https://marketplace.visualstudio.com/items?itemName=codecritic.codecritic), or from a terminal:
+Or open the [Visual Studio Marketplace listing](https://marketplace.visualstudio.com/items?itemName=CodeCritic.codecritic-vscode), or from a terminal:
 
 ```bash
-code --install-extension codecritic.codecritic
+code --install-extension CodeCritic.codecritic-vscode
 ```
 
 ### Cursor
@@ -25,13 +25,13 @@ code --install-extension codecritic.codecritic
 Cursor uses an Open VSX-compatible marketplace (not the Microsoft Marketplace).
 
 1. Open **Extensions** (`Ctrl+Shift+X` / `Cmd+Shift+X`).
-2. Search for **CodeCritic** (publisher **codecritic**).
+2. Search for **CodeCritic** (publisher **CodeCritic**).
 3. Click **Install**.
 
-Or open the [Open VSX listing](https://open-vsx.org/extension/codecritic/codecritic), or from a terminal:
+Or open the [Open VSX listing](https://open-vsx.org/extension/CodeCritic/codecritic-vscode), or from a terminal:
 
 ```bash
-cursor --install-extension codecritic.codecritic
+cursor --install-extension CodeCritic.codecritic-vscode
 ```
 
 If search does not show the extension yet, install the same ID from Open VSX or use **Extensions: Install from VSIX…** with a release build from the [GitHub repository](https://github.com/CodeCritic-Reviews/codecritic-vscode).

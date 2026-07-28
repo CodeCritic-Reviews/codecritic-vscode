@@ -1,9 +1,9 @@
 {
-  "name": "codecritic",
-  "displayName": "CodeCritic",
+  "name": "codecritic-vscode",
+  "displayName": "CodeCritic - AI code review",
   "description": "AI code review for VS Code and Cursor - sidebar, scores, issues, Mark as done / Dismiss, Fix in Chat. Get an API key at code-critic.com.",
-  "version": "0.1.16",
-  "publisher": "codecritic",
+  "version": "0.1.17",
+  "publisher": "CodeCritic",
   "license": "MIT",
   "homepage": "https://code-critic.com",
   "repository": {
