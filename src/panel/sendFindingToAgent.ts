@@ -109,6 +109,99 @@ async function tryOpenChatWithQuery(query: string): Promise<boolean> {
   }
 }
 
+export type AllFindingsPromptInput = {
+  reviewUuid: string;
+  reviewTitle?: string | null;
+  siteUrl?: string;
+  score?: number;
+  summary?: string;
+  strengths?: string[];
+  improvements?: string[];
+  issues: Array<{
+    message: string;
+    severity?: string;
+    path?: string;
+    line?: number;
+    suggestion?: string;
+    suggestionCode?: string;
+  }>;
+  suggestions: string[];
+};
+
+/** Pure builder - unit-tested. */
+export function buildAllFindingsPrompt(p: AllFindingsPromptInput): string {
+  const title = (p.reviewTitle || 'Code review').trim();
+  const lines: string[] = [
+    '## CodeCritic review - apply fixes in this workspace',
+    '',
+    `- **Review:** ${title}`,
+    `- **Review id:** ${p.reviewUuid}`,
+  ];
+  if (p.siteUrl) {
+    lines.push(`- **Open on site:** ${p.siteUrl}`);
+  }
+  if (p.score != null) {
+    lines.push(`- **Score:** ${p.score}`);
+  }
+  if (p.summary?.trim()) {
+    lines.push('', '### Summary', p.summary.trim());
+  }
+  if (p.strengths?.length) {
+    lines.push('', '### Strengths');
+    for (const s of p.strengths) lines.push(`- ${s}`);
+  }
+  if (p.improvements?.length) {
+    lines.push('', '### Improvements');
+    for (const s of p.improvements) lines.push(`- ${s}`);
+  }
+  if (p.issues.length) {
+    lines.push('', `### Issues (${p.issues.length})`);
+    p.issues.forEach((iss, i) => {
+      const loc = [iss.path, iss.line != null ? `line ${iss.line}` : null].filter(Boolean).join(', ');
+      const sev = iss.severity ? ` [${iss.severity}]` : '';
+      lines.push('', `#### ${i + 1}.${sev}${loc ? ` (${loc})` : ''}`, iss.message);
+      if (iss.suggestion?.trim()) lines.push('', `Hint: ${iss.suggestion.trim()}`);
+      if (iss.suggestionCode?.trim()) {
+        lines.push('', '```', iss.suggestionCode.trim(), '```');
+      }
+    });
+  }
+  if (p.suggestions.length) {
+    lines.push('', `### Suggestions (${p.suggestions.length})`);
+    p.suggestions.forEach((s, i) => {
+      lines.push(`${i + 1}. ${s}`);
+    });
+  }
+  lines.push(
+    '',
+    'Work through the issues in order. Prefer minimal correct fixes that match project style. Open files as needed.'
+  );
+  return lines.join('\n');
+}
+
+export async function sendAllFindingsToAgent(p: AllFindingsPromptInput): Promise<void> {
+  if (!p.issues.length && !p.suggestions.length && !p.summary?.trim()) {
+    void vscode.window.showWarningMessage('CodeCritic: nothing to copy - review has no findings yet.');
+    return;
+  }
+  const prompt = buildAllFindingsPrompt(p);
+  if (await tryOpenChatWithQuery(prompt)) {
+    void vscode.window.showInformationMessage('CodeCritic: full review sent to Chat / Agent.');
+    return;
+  }
+  await vscode.env.clipboard.writeText(prompt);
+  try {
+    await vscode.commands.executeCommand('workbench.action.chat.open');
+    void vscode.window.showInformationMessage(
+      'CodeCritic: full review copied. Paste into Chat or Agent if the field is empty.'
+    );
+  } catch {
+    void vscode.window.showInformationMessage(
+      'CodeCritic: full review copied to clipboard. Open Chat / Agent and paste.'
+    );
+  }
+}
+
 export async function sendFindingToAgent(sections: BlobSection[], p: SendToAgentFields): Promise<void> {
   const msg = p.message?.trim();
   if (!msg) {

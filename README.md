@@ -1,30 +1,51 @@
 # CodeCritic (VS Code / Cursor)
 
-Run [CodeCritic](https://code-critic.com) reviews from your editor. Full results in a webview panel: score, issues, suggestions, Trust focus, and Done / Dismiss (same API as the dashboard).
+[CodeCritic](https://code-critic.com) is a second opinion for AI-written code. Install this extension from the **official editor marketplaces**, then review selection, file, or folder without leaving VS Code or Cursor.
+
+The **CodeCritic** activity bar opens a sidebar (API key, review actions, recent reviews). Results open in a panel: score, issues, suggestions, Trust focus, Mark as done / Dismiss, line jump, and **Fix in Chat**.
+
+Extension ID: `codecritic.codecritic`
+
+## Install
+
+### Visual Studio Code
+
+1. Open **Extensions** (`Ctrl+Shift+X` / `Cmd+Shift+X`).
+2. Search for **CodeCritic** (publisher **codecritic**).
+3. Click **Install**.
+
+Or open the [Visual Studio Marketplace listing](https://marketplace.visualstudio.com/items?itemName=codecritic.codecritic), or from a terminal:
+
+```bash
+code --install-extension codecritic.codecritic
+```
+
+### Cursor
+
+Cursor uses an Open VSX-compatible marketplace (not the Microsoft Marketplace).
+
+1. Open **Extensions** (`Ctrl+Shift+X` / `Cmd+Shift+X`).
+2. Search for **CodeCritic** (publisher **codecritic**).
+3. Click **Install**.
+
+Or open the [Open VSX listing](https://open-vsx.org/extension/codecritic/codecritic), or from a terminal:
+
+```bash
+cursor --install-extension codecritic.codecritic
+```
+
+If search does not show the extension yet, install the same ID from Open VSX or use **Extensions: Install from VSIX…** with a release build from the [GitHub repository](https://github.com/CodeCritic-Reviews/codecritic-vscode).
 
 ## Requirements
 
 - VS Code 1.80+ or Cursor
-- A CodeCritic account and **API key** from Dashboard → Settings → API key
-
-## Install
-
-1. Build or download `codecritic-0.1.0.vsix`.
-2. Command Palette → **Extensions: Install from VSIX…** → pick the file.
-
-Or from this repo:
-
-```bash
-npm install
-npm run compile
-npx vsce package --no-dependencies
-```
+- A CodeCritic account and **API key** from [Dashboard → Settings → API key](https://code-critic.com/dashboard?tab=settings)
 
 ## Setup
 
-1. **CodeCritic: Set API key** → paste your key (stored in Secret Storage).
-2. Optional: **CodeCritic: Open Dashboard (API key)** if you need to copy or rotate the key.
-3. Optional setting **codecritic.apiBaseUrl** (default `https://api.code-critic.com`). Against local Rack, use `http://localhost:9292/api` so requests hit `/api/v1/...` like the web app.
+1. Open the CodeCritic sidebar (activity bar) or run **CodeCritic: Set API key** and paste your key (Secret Storage).
+2. Optional: **CodeCritic: Open Dashboard (API key)** to copy or rotate the key in the browser.
+3. Optional setting **codecritic.apiBaseUrl** (default `https://api.code-critic.com`). For local Rack, use `http://localhost:9292/api`.
 
 ## Commands
 
@@ -35,22 +56,25 @@ npx vsce package --no-dependencies
 | CodeCritic: Review files… | Pick one or more files |
 | CodeCritic: Review folder… | Text files under a folder (limits apply) |
 | CodeCritic: Open last review result | Refetch last UUID for this workspace |
+| CodeCritic: Open sidebar | Focus the CodeCritic activity bar view |
 
-Context menu: review selection / active file when editor is open.
+Context menu: review selection / active file when an editor is open. The sidebar exposes the same actions and recent history.
 
 ## Auth
 
-The extension uses `Authorization: Bearer <API key>` against `/v1/code_reviews` on the API host (default `https://api.code-critic.com`). The same routes accept a JWT from the web app; the server treats a valid API key as an alternative bearer credential.
+The extension sends `Authorization: Bearer <API key>` to `/v1/code_reviews` on the API host (default `https://api.code-critic.com`). Billing matches the web app.
 
 ## Troubleshooting
 
-**HTTP 404 / “Not Found”:** `codecritic.apiBaseUrl` must be the **API host** (e.g. `https://api.code-critic.com`), not the website. The extension calls `…/v1/code_reviews` itself. A 404 with plain text means the request hit a web server or CDN, not Grape JSON.
+**HTTP 404 / “Not Found”:** `codecritic.apiBaseUrl` must be the **API host** (e.g. `https://api.code-critic.com`), not the marketing site.
 
-**ByteString / character greater than 255:** Node’s `fetch` only allows Latin-1 in HTTP headers. The extension normalizes the key with NFKC and keeps only `0-9a-f` code points (no surrogates or homoglyphs). Settings **codecritic.apiBaseUrl** is stripped to ASCII. Re-run **CodeCritic: Set API key** and paste the key only from the dashboard, then reload the window.
+**ByteString / character greater than 255:** Re-run **CodeCritic: Set API key** and paste the key only from the dashboard, then reload the window.
+
+**Review timed out / Connect Timeout:** The extension retries connect failures. If the panel never opens, use **CodeCritic: Open last review result** - create may have succeeded on the server. On WSL/VPN, a second try often works.
 
 ## Limits
 
-Combined payload size is capped (default 20,000 characters on the server). The extension checks before sending. Folder mode skips very large files and common dependency directories.
+Combined payload size is capped (default 20,000 characters on the server). Folder mode skips very large files and common dependency directories.
 
 Trust focus, pay-per-use, and other preferences are configured in the web app only.
 
@@ -59,9 +83,11 @@ Trust focus, pay-per-use, and other preferences are configured in the web app on
 ```bash
 npm install
 npm run watch   # extension + webview
+npm test        # unit tests (Vitest)
+npx vsce package --no-dependencies   # local .vsix for sideload testing
 ```
 
-Press F5 in VS Code with this folder opened to run the Extension Development Host.
+Press **F5** with this folder open (launch config: **Run Extension**) to start the Extension Development Host.
 
 ## License
 

@@ -9,6 +9,17 @@ const vscode = acquireVsCodeApi();
 
 let lastReview: CodeReviewPayload | null = null;
 let reviewUuid = '';
+let dashboardUrl = 'https://code-critic.com';
+let logoUrl = '';
+
+function siteReviewUrl(uuid: string): string {
+  return `${dashboardUrl.replace(/\/+$/, '')}/reviews/${uuid}`;
+}
+
+function resolveLogoUrl(): string {
+  if (logoUrl) return logoUrl;
+  return document.getElementById('app')?.getAttribute('data-logo') || '';
+}
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -28,6 +39,25 @@ function severityClass(sev?: string): string {
   return 'sev-low';
 }
 
+function severityPillClass(sev?: string): string {
+  const s = (sev || '').toLowerCase();
+  if (s === 'high') return 'high';
+  if (s === 'medium') return 'medium';
+  return 'low';
+}
+
+function scoreTone(score: number): string {
+  if (score < 50) return 'low';
+  if (score < 75) return 'mid';
+  return '';
+}
+
+function statusPillClass(status: string): string {
+  if (status === 'completed') return 'ok';
+  if (status === 'failed' || status === 'cancelled') return 'bad';
+  return '';
+}
+
 function renderTrust(tf: TrustFocusResult): HTMLElement {
   const wrap = el('div', 'trust-panel');
   if (tf.status === 'failed') {
@@ -39,11 +69,10 @@ function renderTrust(tf: TrustFocusResult): HTMLElement {
   }
   const level = (tf.trust_risk_level || 'medium').toLowerCase();
   const lvlClass = level === 'high' ? 'tf-high' : level === 'low' ? 'tf-low' : 'tf-medium';
-  const lvl = el('span', `trust-level ${lvlClass}`, `${level} risk`);
   wrap.appendChild(el('h2', '', 'Trust focus'));
-  wrap.appendChild(lvl);
+  wrap.appendChild(el('span', `trust-level ${lvlClass}`, `${level} risk`));
   if (tf.risk_rationale) {
-    wrap.appendChild(el('p', '', tf.risk_rationale));
+    wrap.appendChild(el('p', 'summary-text', tf.risk_rationale));
   }
   const addList = (title: string, items?: string[]) => {
     if (!items?.length) return;
@@ -71,20 +100,40 @@ function renderIssue(
   kind: 'issue' | 'suggestion',
   reviewTitle: string
 ): HTMLElement {
-  const metaRow =
-    kind === 'issue' ? ui?.issues?.[index] : ui?.suggestions?.[index];
+  const metaRow = kind === 'issue' ? ui?.issues?.[index] : ui?.suggestions?.[index];
   const vis = metaRow?.visibility ?? 'visible';
-  const row = el('div', `issue ${severityClass(issue.severity)}${vis !== 'visible' ? ' collapsed' : ''}`);
+  const userState = metaRow?.user_state ?? null;
+  const row = el(
+    'div',
+    `issue ${severityClass(issue.severity)}${vis !== 'visible' ? ' collapsed' : ''}${userState === 'done' ? ' done' : ''}`
+  );
 
-  row.appendChild(el('div', '', issue.message));
+  const top = el('div', 'issue-top');
+  if (kind === 'issue') {
+    top.appendChild(el('span', `sev-pill ${severityPillClass(issue.severity)}`, issue.severity || 'note'));
+  } else {
+    top.appendChild(el('span', 'kind-pill', 'Suggestion'));
+  }
+  if (userState === 'done') {
+    top.appendChild(el('span', 'state-pill done', 'Done'));
+  } else if (userState === 'dismissed') {
+    top.appendChild(el('span', 'state-pill dismissed', 'Dismissed'));
+  }
+  row.appendChild(top);
 
-  if (vis !== 'visible' && metaRow?.collapse_reason) {
-    row.appendChild(el('div', 'muted', metaRow.collapse_reason));
-    const undo = el('button', 'secondary', 'Undo dismiss');
+  row.appendChild(el('p', 'issue-msg', issue.message));
+
+  if (vis !== 'visible') {
+    if (metaRow?.collapse_reason) {
+      row.appendChild(el('div', 'muted', metaRow.collapse_reason));
+    }
+    const undo = el('button', 'secondary', userState === 'done' ? 'Undo done' : 'Undo dismiss');
     undo.addEventListener('click', () => {
       vscode.postMessage({ type: 'clearFinding', uuid: reviewUuid, item_kind: kind, item_index: index });
     });
-    row.appendChild(undo);
+    const actions = el('div', 'issue-meta');
+    actions.appendChild(undo);
+    row.appendChild(actions);
     return row;
   }
 
@@ -100,14 +149,47 @@ function renderIssue(
   if (issue.path) {
     meta.appendChild(el('span', 'muted', issue.path));
   }
-  row.appendChild(meta);
+  if (meta.childNodes.length) {
+    row.appendChild(meta);
+  }
 
   if (issue.suggestion_code) {
     row.appendChild(el('pre', 'sig', issue.suggestion_code));
   }
 
   const actions = el('div', 'issue-meta');
-  const chat = el('button', '', 'Fix in Chat');
+  if (userState) {
+    const undo = el('button', 'secondary', userState === 'done' ? 'Undo done' : 'Undo dismiss');
+    undo.addEventListener('click', () => {
+      vscode.postMessage({ type: 'clearFinding', uuid: reviewUuid, item_kind: kind, item_index: index });
+    });
+    actions.appendChild(undo);
+  } else {
+    const done = el('button', 'secondary done-btn', 'Mark as done');
+    done.addEventListener('click', () => {
+      vscode.postMessage({
+        type: 'setFinding',
+        uuid: reviewUuid,
+        item_kind: kind,
+        item_index: index,
+        state: 'done',
+      });
+    });
+    const dismiss = el('button', 'secondary', 'Dismiss');
+    dismiss.addEventListener('click', () => {
+      vscode.postMessage({
+        type: 'setFinding',
+        uuid: reviewUuid,
+        item_kind: kind,
+        item_index: index,
+        state: 'dismissed',
+      });
+    });
+    actions.appendChild(done);
+    actions.appendChild(dismiss);
+  }
+
+  const chat = el('button', 'primary', 'Fix in Chat');
   chat.title =
     'Open Chat or Agent with a ready-made prompt (VS Code Copilot, Cursor, etc.). The file is opened when line mapping is available.';
   chat.addEventListener('click', () =>
@@ -135,6 +217,19 @@ function renderSuggestion(text: string, index: number, ui: FindingsUi | null, re
   return renderIssue(issue, index, ui, 'suggestion', reviewTitle);
 }
 
+function renderBulletSection(title: string, items: string[], variant: 'strengths' | 'improvements'): HTMLElement {
+  const section = el('section', 'section');
+  const head = el('div', 'section-head');
+  head.appendChild(el('h2', 'section-title', title));
+  section.appendChild(head);
+  const card = el('div', `bullet-card ${variant}`);
+  const ul = el('ul');
+  for (const s of items) ul.appendChild(el('li', '', s));
+  card.appendChild(ul);
+  section.appendChild(card);
+  return section;
+}
+
 function render(review: CodeReviewPayload): void {
   const app = document.getElementById('app');
   if (!app) return;
@@ -142,59 +237,132 @@ function render(review: CodeReviewPayload): void {
   lastReview = review;
   reviewUuid = review.uuid;
 
-  app.appendChild(el('h1', '', review.title || 'Code review'));
-  app.appendChild(el('p', 'muted', `Status: ${review.status} · ${review.uuid}`));
+  const hero = el('header', 'hero');
+  hero.appendChild(el('div', 'hero-glow'));
+
+  const brandRow = el('div', 'brand-row');
+  const chip = el('div', 'brand-chip');
+  const logo = resolveLogoUrl();
+  if (logo) {
+    const img = el('img', 'brand-logo');
+    img.src = logo;
+    img.alt = '';
+    chip.appendChild(img);
+  } else {
+    chip.appendChild(el('span', 'brand-dot'));
+  }
+  chip.appendChild(document.createTextNode('CodeCritic'));
+  brandRow.appendChild(chip);
+  brandRow.appendChild(el('span', `status-pill ${statusPillClass(review.status)}`, review.status.replace(/_/g, ' ')));
+  hero.appendChild(brandRow);
+
+  hero.appendChild(el('h1', 'hero-title', review.title || 'Code review'));
+  hero.appendChild(el('p', 'hero-sub', review.uuid));
+
+  const actions = el('div', 'hero-actions');
+  const openSite = el('button', 'secondary', 'Open on site');
+  openSite.title = 'Open this review in the CodeCritic web app';
+  openSite.addEventListener('click', () => {
+    vscode.postMessage({ type: 'openExternal', url: siteReviewUrl(review.uuid) });
+  });
+  actions.appendChild(openSite);
 
   if (review.status === 'failed') {
+    hero.appendChild(actions);
+    app.appendChild(hero);
     const err = (review.review_result as { error?: string } | null)?.error || 'Review failed';
     app.appendChild(el('div', 'error-banner', err));
     return;
   }
 
   if (review.status !== 'completed' || !review.review_result) {
-    app.appendChild(el('p', 'muted', 'No result yet.'));
+    hero.appendChild(actions);
+    app.appendChild(hero);
+    app.appendChild(el('div', 'empty-state', 'No result yet - wait for the review to finish.'));
     return;
   }
 
   const res = review.review_result;
   const findingsUi = review.findings_ui ?? null;
+  const score = res.score ?? 0;
 
-  const scoreRow = el('div', 'score-row');
-  scoreRow.appendChild(el('div', 'score-badge', String(res.score ?? 0)));
+  const copyAll = el('button', 'primary', 'Copy all to Agent');
+  copyAll.title = 'Send the full review (summary + issues + suggestions) to Chat / Agent, or copy to clipboard';
+  copyAll.addEventListener('click', () => {
+    const issues = (res.issues || []).map((iss) => ({
+      message: iss.message,
+      severity: iss.severity,
+      path: iss.path,
+      line: iss.line,
+      suggestion: iss.suggestion,
+      suggestion_code: iss.suggestion_code,
+    }));
+    const suggestions = (res.suggestions || []).map((s) =>
+      typeof s === 'string' ? s : s.message || s.text || JSON.stringify(s)
+    );
+    vscode.postMessage({
+      type: 'copyAllToAgent',
+      uuid: review.uuid,
+      review_title: review.title || '',
+      site_url: siteReviewUrl(review.uuid),
+      score,
+      summary: res.ai_analysis?.summary || '',
+      strengths: res.ai_analysis?.strengths || [],
+      improvements: res.ai_analysis?.improvements || [],
+      issues,
+      suggestions,
+    });
+  });
+  actions.appendChild(copyAll);
+  hero.appendChild(actions);
+
+  const scoreBlock = el('div', 'score-block');
+  const ring = el('div', `score-ring ${scoreTone(score)}`, String(score));
+  scoreBlock.appendChild(ring);
+  const scoreCopy = el('div');
+  scoreCopy.appendChild(el('p', 'score-label', 'Quality score'));
   const summary = res.ai_analysis?.summary;
-  if (summary) {
-    scoreRow.appendChild(el('div', '', summary));
-  }
-  app.appendChild(scoreRow);
+  scoreCopy.appendChild(el('p', 'summary-text', summary || 'Review complete.'));
+  scoreBlock.appendChild(scoreCopy);
+  hero.appendChild(scoreBlock);
+  app.appendChild(hero);
 
   if (res.ai_analysis?.strengths?.length) {
-    app.appendChild(el('h2', '', 'Strengths'));
-    const ul = el('ul', 'tf-list');
-    for (const s of res.ai_analysis.strengths) ul.appendChild(el('li', '', s));
-    app.appendChild(ul);
+    app.appendChild(renderBulletSection('Strengths', res.ai_analysis.strengths, 'strengths'));
   }
   if (res.ai_analysis?.improvements?.length) {
-    app.appendChild(el('h2', '', 'Improvements'));
-    const ul = el('ul', 'tf-list');
-    for (const s of res.ai_analysis.improvements) ul.appendChild(el('li', '', s));
-    app.appendChild(ul);
+    app.appendChild(renderBulletSection('Improvements', res.ai_analysis.improvements, 'improvements'));
   }
 
   const reviewTitle = review.title || '';
 
   const issues = res.issues || [];
   if (issues.length) {
-    app.appendChild(el('h2', '', `Issues (${issues.length})`));
-    issues.forEach((iss, i) => app.appendChild(renderIssue(iss, i, findingsUi, 'issue', reviewTitle)));
+    const section = el('section', 'section');
+    const head = el('div', 'section-head');
+    head.appendChild(el('h2', 'section-title', 'Issues'));
+    head.appendChild(el('span', 'section-count', `${issues.length}`));
+    section.appendChild(head);
+    const list = el('div', 'card-list');
+    issues.forEach((iss, i) => list.appendChild(renderIssue(iss, i, findingsUi, 'issue', reviewTitle)));
+    section.appendChild(list);
+    app.appendChild(section);
   }
 
   const sugg = res.suggestions || [];
   if (sugg.length) {
-    app.appendChild(el('h2', '', `Suggestions (${sugg.length})`));
+    const section = el('section', 'section');
+    const head = el('div', 'section-head');
+    head.appendChild(el('h2', 'section-title', 'Suggestions'));
+    head.appendChild(el('span', 'section-count', `${sugg.length}`));
+    section.appendChild(head);
+    const list = el('div', 'card-list');
     sugg.forEach((s, i) => {
       const text = typeof s === 'string' ? s : s.message || s.text || JSON.stringify(s);
-      app.appendChild(renderSuggestion(text, i, findingsUi, reviewTitle));
+      list.appendChild(renderSuggestion(text, i, findingsUi, reviewTitle));
     });
+    section.appendChild(list);
+    app.appendChild(section);
   }
 
   if (res.trust_focus) {
@@ -202,8 +370,64 @@ function render(review: CodeReviewPayload): void {
   }
 }
 
+type BootPayload =
+  | { review?: CodeReviewPayload; dashboardUrl?: string; logoUrl?: string }
+  | CodeReviewPayload;
+
+function readEmbeddedBoot(): {
+  review: CodeReviewPayload | null;
+  dashboardUrl?: string;
+  logoUrl?: string;
+} {
+  const node = document.getElementById('cc-initial-review');
+  if (!node?.textContent?.trim()) return { review: null };
+  try {
+    const parsed = JSON.parse(node.textContent) as BootPayload;
+    if (parsed && typeof parsed === 'object' && 'review' in parsed && parsed.review) {
+      return {
+        review: parsed.review,
+        dashboardUrl: typeof parsed.dashboardUrl === 'string' ? parsed.dashboardUrl : undefined,
+        logoUrl: typeof parsed.logoUrl === 'string' ? parsed.logoUrl : undefined,
+      };
+    }
+    // Legacy: bare review object
+    if (parsed && typeof parsed === 'object' && 'uuid' in parsed && 'status' in parsed) {
+      return { review: parsed as CodeReviewPayload };
+    }
+  } catch {
+    /* ignore */
+  }
+  return { review: null };
+}
+
+function boot(): void {
+  const embedded = readEmbeddedBoot();
+  if (embedded.dashboardUrl) {
+    dashboardUrl = embedded.dashboardUrl;
+  }
+  if (embedded.logoUrl) {
+    logoUrl = embedded.logoUrl;
+  }
+  if (embedded.review) {
+    render(embedded.review);
+  }
+  vscode.postMessage({ type: 'ready' });
+}
+
 window.addEventListener('message', (event: MessageEvent) => {
-  const msg = event.data as { type?: string; review?: CodeReviewPayload; findings_ui?: FindingsUi };
+  const msg = event.data as {
+    type?: string;
+    review?: CodeReviewPayload;
+    findings_ui?: FindingsUi;
+    dashboardUrl?: string;
+    logoUrl?: string;
+  };
+  if (typeof msg.dashboardUrl === 'string' && msg.dashboardUrl) {
+    dashboardUrl = msg.dashboardUrl;
+  }
+  if (typeof msg.logoUrl === 'string' && msg.logoUrl) {
+    logoUrl = msg.logoUrl;
+  }
   if (msg.type === 'bootstrap' && msg.review) {
     render(msg.review);
   }
@@ -212,3 +436,5 @@ window.addEventListener('message', (event: MessageEvent) => {
     render(lastReview);
   }
 });
+
+boot();

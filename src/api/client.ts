@@ -1,4 +1,31 @@
 import type { CodeReviewPayload, FindingsUi } from './types';
+import { Agent, fetch as undiciFetch } from 'undici';
+import { isConnectFailure } from './networkError';
+
+/**
+ * Prefer shorter connect attempts + retries over a single 60s hang.
+ * Connect failures are safe to retry for POST (server never accepted the socket).
+ */
+const apiAgent = new Agent({
+  connectTimeout: 25_000,
+  headersTimeout: 120_000,
+  bodyTimeout: 120_000,
+  keepAliveTimeout: 30_000,
+});
+
+const CONNECT_RETRY_ATTEMPTS = 3;
+const CONNECT_RETRY_DELAYS_MS = [800, 2000];
+
+function delay(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function apiFetch(url: string, init: RequestInit): Promise<Response> {
+  return undiciFetch(url, {
+    ...init,
+    dispatcher: apiAgent,
+  }) as unknown as Promise<Response>;
+}
 
 /**
  * Node fetch (undici) requires header values as ISO-8859-1. Build the key from code points only in 0-9a-f
@@ -34,7 +61,8 @@ export function sanitizeApiBaseUrl(raw: string): string {
  */
 const API_VERSION_PATH = 'v1';
 
-function joinUrl(base: string, path: string): string {
+/** Join API base + path (exported for unit tests). */
+export function joinApiUrl(base: string, path: string): string {
   const b = base.replace(/\/+$/, '');
   const segment = path.replace(/^\/+/, '');
   try {
@@ -199,7 +227,7 @@ export class CodeCriticClient {
     apiPath: string,
     body?: unknown
   ): Promise<{ ok: boolean; status: number; json: T }> {
-    const url = joinUrl(this.baseUrl, apiPath);
+    const url = joinApiUrl(this.baseUrl, apiPath);
     const init: RequestInit = {
       method,
       headers: await this.headers(),
@@ -207,20 +235,29 @@ export class CodeCriticClient {
     if (body !== undefined) {
       init.body = JSON.stringify(body);
     }
-    let res: Response;
-    try {
-      res = await fetch(url, init);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (/ByteString|character at index|greater than 255/i.test(msg)) {
-        throw new Error(
-          'HTTP client rejected a header value (non-ASCII). Run CodeCritic: Set API key and paste the hex key from the dashboard only. Check codecritic.apiBaseUrl has no special characters. Then reload the window.'
-        );
+
+    let lastError: unknown;
+    for (let attempt = 0; attempt < CONNECT_RETRY_ATTEMPTS; attempt++) {
+      try {
+        const res = await apiFetch(url, init);
+        const json = (await this.readJsonOrFail(res, method, url)) as T;
+        return { ok: res.ok, status: res.status, json };
+      } catch (e) {
+        lastError = e;
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/ByteString|character at index|greater than 255/i.test(msg)) {
+          throw new Error(
+            'HTTP client rejected a header value (non-ASCII). Run CodeCritic: Set API key and paste the hex key from the dashboard only. Check codecritic.apiBaseUrl has no special characters. Then reload the window.'
+          );
+        }
+        // Only retry when the TCP/TLS connect never completed (safe for POST create).
+        if (!isConnectFailure(e) || attempt >= CONNECT_RETRY_ATTEMPTS - 1) {
+          this.throwNetworkError(url, method, e);
+        }
+        await delay(CONNECT_RETRY_DELAYS_MS[attempt] ?? 2000);
       }
-      this.throwNetworkError(url, method, e);
     }
-    const json = (await this.readJsonOrFail(res, method, url)) as T;
-    return { ok: res.ok, status: res.status, json };
+    this.throwNetworkError(url, method, lastError);
   }
 
   async createReview(payload: {

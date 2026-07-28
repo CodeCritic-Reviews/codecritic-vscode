@@ -32,12 +32,31 @@ export type ReviewContentPart = {
   anchorLineInFile?: number;
 };
 
+/** VS Code-free part for unit tests and shared blob builder. */
+export type PureReviewPart = {
+  displayPath: string;
+  content: string;
+  languageId: string;
+  anchorLineInFile?: number;
+};
+
+export type PureBlobSection = {
+  displayPath: string;
+  headerLine: number;
+  contentStartLine: number;
+  contentEndLine: number;
+  anchorLineInFile?: number;
+};
+
 const HEADER_PREFIX = '=== CodeCritic: ';
 const HEADER_SUFFIX = ' ===';
 
-export function buildFromParts(parts: ReviewContentPart[], titleHint: string): BuiltPayload {
+export function buildBlobFromParts(
+  parts: PureReviewPart[],
+  titleHint: string
+): { code: string; language: string; title: string; sections: PureBlobSection[] } {
   const lines: string[] = [];
-  const sections: BlobSection[] = [];
+  const sections: PureBlobSection[] = [];
   let blobLine = 1;
 
   const languages = new Set<string>();
@@ -61,7 +80,6 @@ export function buildFromParts(parts: ReviewContentPart[], titleHint: string): B
 
     sections.push({
       displayPath: p.displayPath,
-      uri: p.uri,
       headerLine,
       contentStartLine,
       contentEndLine,
@@ -83,21 +101,60 @@ export function buildFromParts(parts: ReviewContentPart[], titleHint: string): B
   return { code, language, title, sections };
 }
 
+export function buildFromParts(parts: ReviewContentPart[], titleHint: string): BuiltPayload {
+  const built = buildBlobFromParts(
+    parts.map((p) => ({
+      displayPath: p.displayPath,
+      content: p.content,
+      languageId: p.languageId,
+      anchorLineInFile: p.anchorLineInFile,
+    })),
+    titleHint
+  );
+  return {
+    code: built.code,
+    language: built.language,
+    title: built.title,
+    sections: built.sections.map((s, i) => ({
+      ...s,
+      uri: parts[i].uri,
+    })),
+  };
+}
+
+/** Map a 1-based blob line to a 1-based editor file line (no Uri). */
+export function resolveBlobLineToFileLine(
+  sections: readonly PureBlobSection[],
+  blobLine: number
+): { displayPath: string; line: number } | null {
+  for (const s of sections) {
+    if (blobLine === s.headerLine) {
+      const line = s.anchorLineInFile ?? 1;
+      return { displayPath: s.displayPath, line };
+    }
+    if (blobLine >= s.contentStartLine && blobLine <= s.contentEndLine) {
+      const offset = blobLine - s.contentStartLine;
+      const line = s.anchorLineInFile != null ? s.anchorLineInFile + offset : offset + 1;
+      return { displayPath: s.displayPath, line };
+    }
+  }
+  return null;
+}
+
 export function resolveBlobLineToEditor(
   sections: BlobSection[],
   blobLine: number
 ): { uri: vscode.Uri; line: number } | null {
+  const mapped = resolveBlobLineToFileLine(sections, blobLine);
+  if (!mapped) return null;
+  const section = sections.find((s) => s.displayPath === mapped.displayPath);
+  if (!section) return null;
+  // Prefer the section that actually contains this blob line (paths can repeat).
   for (const s of sections) {
-    if (blobLine === s.headerLine) {
-      const line = s.anchorLineInFile ?? 1;
-      return { uri: s.uri, line };
-    }
-    if (blobLine >= s.contentStartLine && blobLine <= s.contentEndLine) {
-      const offset = blobLine - s.contentStartLine;
-      const line =
-        s.anchorLineInFile != null ? s.anchorLineInFile + offset : offset + 1;
-      return { uri: s.uri, line };
+    if (blobLine === s.headerLine || (blobLine >= s.contentStartLine && blobLine <= s.contentEndLine)) {
+      const lineMapped = resolveBlobLineToFileLine([s], blobLine);
+      if (lineMapped) return { uri: s.uri, line: lineMapped.line };
     }
   }
-  return null;
+  return { uri: section.uri, line: mapped.line };
 }

@@ -1,10 +1,27 @@
 {
   "name": "codecritic",
   "displayName": "CodeCritic",
-  "description": "Run CodeCritic reviews from VS Code or Cursor. Full results in the editor (API key from Dashboard).",
-  "version": "0.1.7",
+  "description": "AI code review for VS Code and Cursor - sidebar, scores, issues, Mark as done / Dismiss, Fix in Chat. Get an API key at code-critic.com.",
+  "version": "0.1.16",
   "publisher": "codecritic",
   "license": "MIT",
+  "homepage": "https://code-critic.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CodeCritic-Reviews/codecritic-vscode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/CodeCritic-Reviews/codecritic-vscode/issues"
+  },
+  "keywords": [
+    "codecritic",
+    "code review",
+    "ai",
+    "cursor",
+    "lint",
+    "security",
+    "quality"
+  ],
   "engines": {
     "vscode": "^1.80.0"
   },
@@ -16,6 +33,7 @@
     "onStartupFinished"
   ],
   "main": "./out/extension.js",
+  "icon": "media/icon.png",
   "contributes": {
     "commands": [
       {
@@ -45,6 +63,10 @@
       {
         "command": "codecritic.openLastResult",
         "title": "CodeCritic: Open last review result"
+      },
+      {
+        "command": "codecritic.focusHome",
+        "title": "CodeCritic: Open sidebar"
       }
     ],
     "configuration": {
@@ -61,6 +83,24 @@
           "description": "Dashboard URL for opening API key settings in the browser."
         }
       }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "codecritic",
+          "title": "CodeCritic",
+          "icon": "media/icons/codecritic-activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "codecritic": [
+        {
+          "type": "webview",
+          "id": "codecritic.home",
+          "name": "CodeCritic"
+        }
+      ]
     },
     "menus": {
       "editor/context": [
@@ -79,14 +119,20 @@
   "scripts": {
     "compile": "node esbuild.config.mjs",
     "watch": "node esbuild.config.mjs --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "vscode:prepublish": "npm run compile",
     "package": "vsce package"
+  },
+  "dependencies": {
+    "undici": "^7.25.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
     "@types/vscode": "^1.80.0",
     "@vscode/vsce": "^2.24.0",
     "esbuild": "^0.20.2",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitest": "^3.0.5"
   }
 }

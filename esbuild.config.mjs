@@ -13,7 +13,7 @@ const extensionCtx = {
   external: ['vscode'],
 };
 
-const webviewCtx = {
+const reviewWebviewCtx = {
   entryPoints: ['src/webview/reviewView.ts'],
   bundle: true,
   outfile: 'out/reviewView.js',
@@ -23,15 +23,27 @@ const webviewCtx = {
   sourcemap: true,
 };
 
+const homeWebviewCtx = {
+  entryPoints: ['src/webview/homeView.ts'],
+  bundle: true,
+  outfile: 'out/homeView.js',
+  platform: 'browser',
+  target: 'es2022',
+  format: 'iife',
+  sourcemap: true,
+};
+
 async function run() {
   if (watch) {
     const ext = await esbuild.context(extensionCtx);
-    const wv = await esbuild.context(webviewCtx);
-    await Promise.all([ext.watch(), wv.watch()]);
+    const review = await esbuild.context(reviewWebviewCtx);
+    const home = await esbuild.context(homeWebviewCtx);
+    await Promise.all([ext.watch(), review.watch(), home.watch()]);
     console.log('watching…');
   } else {
     await esbuild.build(extensionCtx);
-    await esbuild.build(webviewCtx);
+    await esbuild.build(reviewWebviewCtx);
+    await esbuild.build(homeWebviewCtx);
   }
 }
 

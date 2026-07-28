@@ -5,14 +5,23 @@ import { ReviewPanel } from '../panel/reviewPanel';
 import {
   buildFromParts,
   DEFAULT_MAX_CODE_CHARS,
-  type BlobSection,
   type ReviewContentPart,
 } from '../payload/buildReviewPayload';
 import { collectFolderFiles } from '../collect/collectFolder';
+import { notifySidebarChanged } from '../sidebar/events';
 import { pollUntilReviewDone } from './pollUntilDone';
 
 const RECENT_KEY = 'codecritic.recentReviewUuids';
 const MAX_RECENT = 15;
+
+export function getRecentReviewUuids(context: vscode.ExtensionContext): string[] {
+  return context.workspaceState.get<string[]>(RECENT_KEY) || [];
+}
+
+export async function hasApiKey(context: vscode.ExtensionContext): Promise<boolean> {
+  const k = normalizeApiKey((await getApiKey(context)) ?? '');
+  return Boolean(k);
+}
 
 function getBaseUrl(): string {
   const cfg = vscode.workspace.getConfiguration('codecritic');
@@ -28,9 +37,10 @@ function makeClient(context: vscode.ExtensionContext): CodeCriticClient {
 }
 
 async function pushRecent(context: vscode.ExtensionContext, uuid: string): Promise<void> {
-  const raw = context.workspaceState.get<string[]>(RECENT_KEY) || [];
+  const raw = getRecentReviewUuids(context);
   const next = [uuid, ...raw.filter((u) => u !== uuid)].slice(0, MAX_RECENT);
   await context.workspaceState.update(RECENT_KEY, next);
+  notifySidebarChanged();
 }
 
 async function ensureKey(context: vscode.ExtensionContext): Promise<boolean> {
@@ -93,7 +103,13 @@ export async function runReviewWithParts(
           void vscode.window.showInformationMessage('CodeCritic: review cancelled (job may still run on server).');
         } else {
           const m = e instanceof Error ? e.message : String(e);
-          void vscode.window.showErrorMessage(`CodeCritic: ${m}`);
+          void vscode.window
+            .showErrorMessage(`CodeCritic: ${m}`, 'Open last result')
+            .then((choice) => {
+              if (choice === 'Open last result') {
+                void openLastResult(context, extensionUri);
+              }
+            });
         }
         return;
       }
@@ -189,23 +205,29 @@ export async function reviewFolder(context: vscode.ExtensionContext, extensionUr
   await runReviewWithParts(context, extensionUri, parts, `Folder ${folderName}`);
 }
 
-export async function openLastResult(context: vscode.ExtensionContext, extensionUri: vscode.Uri): Promise<void> {
+export async function openReviewByUuid(
+  context: vscode.ExtensionContext,
+  extensionUri: vscode.Uri,
+  uuid: string
+): Promise<void> {
   if (!(await ensureKey(context))) return;
-  const list = context.workspaceState.get<string[]>(RECENT_KEY) || [];
-  const uuid = list[0];
-  if (!uuid) {
-    void vscode.window.showWarningMessage('CodeCritic: no recent review in this workspace.');
-    return;
-  }
   const client = makeClient(context);
   try {
     const review = await client.getReview(uuid);
-    const sections: BlobSection[] = [];
-    ReviewPanel.show(extensionUri, client, review, sections);
+    ReviewPanel.show(extensionUri, client, review, []);
   } catch (e) {
     const m = e instanceof Error ? e.message : String(e);
     void vscode.window.showErrorMessage(`CodeCritic: ${m}`);
   }
+}
+
+export async function openLastResult(context: vscode.ExtensionContext, extensionUri: vscode.Uri): Promise<void> {
+  const uuid = getRecentReviewUuids(context)[0];
+  if (!uuid) {
+    void vscode.window.showWarningMessage('CodeCritic: no recent review in this workspace.');
+    return;
+  }
+  await openReviewByUuid(context, extensionUri, uuid);
 }
 
 export async function setApiKey(context: vscode.ExtensionContext): Promise<void> {
@@ -220,6 +242,7 @@ export async function setApiKey(context: vscode.ExtensionContext): Promise<void>
   if (next === undefined) return;
   if (!next.trim()) {
     await context.secrets.delete('codecritic.apiKey');
+    notifySidebarChanged();
     void vscode.window.showInformationMessage('CodeCritic: API key cleared.');
     return;
   }
@@ -235,6 +258,7 @@ export async function setApiKey(context: vscode.ExtensionContext): Promise<void>
     );
   }
   await context.secrets.store('codecritic.apiKey', normalized);
+  notifySidebarChanged();
   void vscode.window.showInformationMessage('CodeCritic: API key saved.');
 }
 
